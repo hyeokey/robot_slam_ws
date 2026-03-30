@@ -1,50 +1,54 @@
 # robot_slam_ws
 
-ROS 2 Humble workspace for Tugbot simulation, SLAM, and Nav2 testing with Gazebo Sim.
+Tugbot 시뮬레이션, SLAM, Nav2 테스트를 위한 ROS 2 Humble 워크스페이스입니다. Gazebo Sim 환경에서 맵 생성과 저장된 맵 기반 주행을 할 수 있도록 구성되어 있습니다.
 
-## Workspace layout
+## 구성
 
-- `src/gz_relay_bridge`: Gazebo Sim to ROS 2 bridge nodes
-- `src/tugbot_description`: Tugbot URDF, launch files, Nav2 and SLAM parameters
-- `my_map.yaml`, `my_map.pgm`: saved map for Nav2
+- `src/gz_relay_bridge`
+  - Gazebo Sim 토픽을 ROS 2 토픽으로 연결하는 브리지 패키지입니다.
+  - 라이다, 오도메트리, 시뮬레이션 시간, `/cmd_vel`을 처리합니다.
+- `src/tugbot_description`
+  - Tugbot URDF, launch 파일, Nav2 파라미터, SLAM 파라미터를 포함합니다.
+- `my_map.yaml`, `my_map.pgm`
+  - 저장된 맵 파일입니다.
 
-## Main components
+## 주요 노드
 
 ### `gz_relay_bridge`
 
 - `gz_relay_bridge_node`
-  - relays Gazebo scan, odometry, clock, and `/cmd_vel`
-  - publishes `odom -> base_footprint` TF
-  - can zero odometry at startup
+  - Gazebo의 스캔, 오도메트리, 클럭 정보를 ROS 2로 전달합니다.
+  - `odom -> base_footprint` TF를 발행합니다.
+  - 시작 시점 기준으로 오도메트리를 0으로 맞출 수 있습니다.
 - `independent_steer_controller_node`
-  - drives the Tugbot model inside Gazebo Sim
+  - Gazebo 안의 Tugbot 모델을 제어하는 노드입니다.
 
 ### `tugbot_description`
 
-- robot description: `urdf/tugbot_minimal.urdf.xacro`
-- bridge launch: `launch/tugbot_bridge_tf.launch.py`
-- SLAM launch: `launch/tugbot_slam.launch.py`
-- Nav2 launch: `launch/tugbot_nav2.launch.py`
-- Gazebo world launch: `launch/warehouse_vehicle.launch.py`
+- 로봇 모델: `urdf/tugbot_minimal.urdf.xacro`
+- 브리지 실행: `launch/tugbot_bridge_tf.launch.py`
+- SLAM 실행: `launch/tugbot_slam.launch.py`
+- Nav2 실행: `launch/tugbot_nav2.launch.py`
+- Gazebo 월드 실행: `launch/warehouse_vehicle.launch.py`
 
-## Environment
+## 실행 환경
 
-Tested for:
+기준 환경:
 
 - Ubuntu 22.04
 - ROS 2 Humble
-- Gazebo Sim Harmonic or compatible `gz` command environment
+- `gz` 명령을 사용할 수 있는 Gazebo Sim 환경
 
-Required ROS 2 packages include:
+필요한 ROS 2 패키지 예시:
 
 - `nav2_bringup`
 - `slam_toolbox`
 - `robot_state_publisher`
 - `xacro`
 
-Build dependencies also include Gazebo transport and message libraries used by `gz_relay_bridge`.
+또한 `gz_relay_bridge` 빌드를 위해 Gazebo transport, message 라이브러리가 필요합니다.
 
-## Build
+## 빌드
 
 ```bash
 cd /home/dong/robot_ws
@@ -53,9 +57,9 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-## Run
+## 실행 순서
 
-### 1. Start Gazebo world
+### 1. Gazebo 월드 실행
 
 ```bash
 cd /home/dong/robot_ws
@@ -64,14 +68,14 @@ source install/setup.bash
 ros2 launch tugbot_description warehouse_vehicle.launch.py
 ```
 
-This launches:
+이 launch는 다음을 실행합니다.
 
 - `warehouse_vehicle.world`
-- the Tugbot controller node
+- Tugbot 제어 노드
 
-### 2. Run bridge and SLAM
+### 2. 브리지와 SLAM 실행
 
-Open a new terminal:
+새 터미널에서 실행:
 
 ```bash
 cd /home/dong/robot_ws
@@ -80,15 +84,15 @@ source install/setup.bash
 ros2 launch tugbot_description tugbot_slam.launch.py
 ```
 
-This starts:
+이 launch는 다음을 실행합니다.
 
 - `robot_state_publisher`
 - `gz_relay_bridge_node`
-- `slam_toolbox` in online async mapping mode
+- `slam_toolbox` 온라인 비동기 매핑
 
-### 3. Save the generated map
+### 3. 생성한 맵 저장
 
-After mapping:
+매핑이 끝난 뒤 실행:
 
 ```bash
 cd /home/dong/robot_ws
@@ -97,9 +101,9 @@ source install/setup.bash
 ros2 run nav2_map_server map_saver_cli -f my_map
 ```
 
-### 4. Run Nav2 with the saved map
+### 4. 저장된 맵으로 Nav2 실행
 
-Open a new terminal:
+새 터미널에서 실행:
 
 ```bash
 cd /home/dong/robot_ws
@@ -108,39 +112,39 @@ source install/setup.bash
 ros2 launch tugbot_description tugbot_nav2.launch.py
 ```
 
-Default map file:
+기본 맵 파일 경로:
 
 - `/home/dong/robot_ws/my_map.yaml`
 
-If needed, override it:
+다른 맵을 쓰려면 다음처럼 지정하면 됩니다.
 
 ```bash
 ros2 launch tugbot_description tugbot_nav2.launch.py map:=/home/dong/robot_ws/my_map.yaml
 ```
 
-## Topics and frames
+## 주요 토픽과 프레임
 
-Important ROS 2 topics:
+주요 토픽:
 
 - `/scan`
 - `/odom`
 - `/cmd_vel`
 - `/clock`
 
-Important frames:
+주요 프레임:
 
 - `map`
 - `odom`
 - `base_footprint`
 - `scan_omni`
 
-## Notes
+## 주의사항
 
-- `warehouse_vehicle.launch.py` currently contains hardcoded resource paths under `/home/dong/Desktop` and `/home/dong/.gz/fuel/...`.
-- `tugbot_nav2.launch.py` currently defaults to `/home/dong/robot_ws/my_map.yaml`.
-- If this workspace is moved to another machine or another user account, those paths should be updated.
+- `warehouse_vehicle.launch.py` 안에는 `/home/dong/Desktop`, `/home/dong/.gz/fuel/...` 같은 리소스 경로가 하드코딩되어 있습니다.
+- `tugbot_nav2.launch.py`의 기본 맵 경로는 `/home/dong/robot_ws/my_map.yaml`로 고정되어 있습니다.
+- 다른 PC나 다른 사용자 계정에서 실행할 경우 위 경로들은 수정이 필요할 수 있습니다.
 
-## Repository
+## 저장소
 
 GitHub:
 

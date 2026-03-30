@@ -6,7 +6,7 @@ amcl:
     alpha3: 0.2
     alpha4: 0.2
     alpha5: 0.2
-    base_frame_id: "base_link"
+    base_frame_id: "base_footprint"
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
     beam_skip_threshold: 0.3
@@ -26,7 +26,7 @@ amcl:
     recovery_alpha_fast: 0.0
     recovery_alpha_slow: 0.0
     resample_interval: 1
-    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+    robot_model_type: "nav2_amcl::OmniMotionModel"
     save_pose_rate: 0.5
     sigma_hit: 0.2
     tf_broadcast: true
@@ -43,7 +43,7 @@ bt_navigator:
   ros__parameters:
     use_sim_time: True
     global_frame: map
-    robot_base_frame: base_link
+    robot_base_frame: base_footprint
     odom_topic: /odom
     bt_loop_duration: 10
     default_server_timeout: 20
@@ -104,9 +104,9 @@ bt_navigator_navigate_to_pose_rclcpp_node:
 controller_server:
   ros__parameters:
     use_sim_time: True
-    controller_frequency: 10.0
+    controller_frequency: 15.0
     min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.5
+    min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.3
     progress_checker_plugin: "progress_checker"
@@ -117,27 +117,27 @@ controller_server:
       required_movement_radius: 0.2
       movement_time_allowance: 10.0
     general_goal_checker:
-      stateful: True
+      stateful: False
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.2
-      yaw_goal_tolerance: 0.2
+      yaw_goal_tolerance: 3.14
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: False
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 0.35
+      max_vel_x: 0.60
       max_vel_y: 0.0
-      max_vel_theta: 1.0
-      min_speed_xy: 0.0
-      max_speed_xy: 0.35
+      max_vel_theta: 1.20
+      min_speed_xy: 0.05
+      max_speed_xy: 0.85
       min_speed_theta: 0.0
-      acc_lim_x: 1.0
-      acc_lim_y: 0.0
-      acc_lim_theta: 1.5
-      decel_lim_x: -1.0
-      decel_lim_y: 0.0
-      decel_lim_theta: -1.5
+      acc_lim_x: 1.80
+      acc_lim_y: 1.80
+      acc_lim_theta: 2.00
+      decel_lim_x: -1.80
+      decel_lim_y: -1.80
+      decel_lim_theta: -2.00
       vx_samples: 20
       vy_samples: 1
       vtheta_samples: 20
@@ -145,19 +145,17 @@ controller_server:
       linear_granularity: 0.05
       angular_granularity: 0.025
       transform_tolerance: 0.3
-      short_circuit_trajectory_evaluation: True
+      short_circuit_trajectory_evaluation: False
       stateful: True
-      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+      critics: ["Oscillation", "BaseObstacle", "PreferForward", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
       BaseObstacle.scale: 0.02
-      PathAlign.scale: 24.0
+      PreferForward.scale: 5.0
+      PathAlign.scale: 0.0
       PathAlign.forward_point_distance: 0.1
-      GoalAlign.scale: 20.0
+      GoalAlign.scale: 0.0
       GoalAlign.forward_point_distance: 0.1
-      PathDist.scale: 24.0
-      GoalDist.scale: 20.0
-      RotateToGoal.scale: 24.0
-      RotateToGoal.slowing_factor: 5.0
-      RotateToGoal.lookahead_time: -1.0
+      PathDist.scale: 32.0
+      GoalDist.scale: 32.0
 
 local_costmap:
   local_costmap:
@@ -165,7 +163,7 @@ local_costmap:
       update_frequency: 5.0
       publish_frequency: 2.0
       global_frame: odom
-      robot_base_frame: base_link
+      robot_base_frame: base_footprint
       use_sim_time: True
       rolling_window: true
       width: 4
@@ -199,7 +197,7 @@ global_costmap:
       update_frequency: 1.0
       publish_frequency: 1.0
       global_frame: map
-      robot_base_frame: base_link
+      robot_base_frame: base_footprint
       use_sim_time: True
       robot_radius: 0.30
       resolution: 0.05
@@ -255,12 +253,12 @@ behavior_server:
   ros__parameters:
     use_sim_time: True
     global_frame: map
-    robot_base_frame: base_link
+    robot_base_frame: base_footprint
     transform_tolerance: 0.3
     simulate_ahead_time: 2.0
-    max_rotational_vel: 0.6
+    max_rotational_vel: 1.0
     min_rotational_vel: 0.2
-    rotational_acc_lim: 1.0
+    rotational_acc_lim: 1.5
     behavior_plugins: ["spin", "backup", "drive_on_heading", "wait"]
     spin:
       plugin: "nav2_behaviors/Spin"

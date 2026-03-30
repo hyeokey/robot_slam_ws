@@ -1,6 +1,7 @@
 #include <memory>
 #include <string>
 #include <algorithm>
+#include <cmath>
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -25,7 +26,7 @@ public:
     // ---- GZ topic params ----
     gz_scan_topic_   = declare_parameter<std::string>(
       "gz_scan_topic",
-      "/world/world_demo/model/tugbot/link/scan_omni/sensor/scan_omni/scan");
+      "/scan_omni");
 
     gz_clock_topic_  = declare_parameter<std::string>(
       "gz_clock_topic",
@@ -49,6 +50,8 @@ public:
     odom_frame_id_   = declare_parameter<std::string>("odom_frame_id", "odom");
     base_frame_id_   = declare_parameter<std::string>("base_frame_id", "base_link");
     scan_frame_id_   = declare_parameter<std::string>("scan_frame_id", "laser");
+    zero_odom_on_start_ = declare_parameter<bool>("zero_odom_on_start", true);
+    tf_publish_rate_hz_ = declare_parameter<double>("tf_publish_rate_hz", 50.0);
 
     // ---- ROS pub/sub ----
     scan_pub_  = create_publisher<sensor_msgs::msg::LaserScan>(ros_scan_topic_, 10);
@@ -61,6 +64,12 @@ public:
 
     // TF broadcaster (odom -> base_link)
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+
+    const auto tf_period =
+      std::chrono::duration<double>(1.0 / std::max(1.0, tf_publish_rate_hz_));
+    tf_timer_ = create_wall_timer(
+      std::chrono::duration_cast<std::chrono::milliseconds>(tf_period),
+      std::bind(&GzRelayBridge::publishLatestTf, this));
 
     // ---- GZ subscribe/advertise ----
     const bool ok_clock = gz_node_.Subscribe(gz_clock_topic_, &GzRelayBridge::onGzClock, this);
@@ -83,6 +92,24 @@ public:
   }
 
 private:
+  static double normalizeAngle(double angle) {
+    while (angle > M_PI) {
+      angle -= 2.0 * M_PI;
+    }
+    while (angle < -M_PI) {
+      angle += 2.0 * M_PI;
+    }
+    return angle;
+  }
+
+  static double yawFromQuaternion(
+    double x, double y, double z, double w)
+  {
+    const double siny_cosp = 2.0 * (w * z + x * y);
+    const double cosy_cosp = 1.0 - 2.0 * (y * y + z * z);
+    return std::atan2(siny_cosp, cosy_cosp);
+  }
+
   static std::string sanitize_frame(std::string s) {
     // Gazebo가 "tugbot::base_link" 같은 걸 주는 경우가 있어서 ROS TF 프레임에 안전하게
     std::replace(s.begin(), s.end(), ':', '_');
@@ -115,7 +142,11 @@ private:
 
   void onGzScan(const gz::msgs::LaserScan &msg) {
   sensor_msgs::msg::LaserScan out;
-  out.header.stamp = stamp_now();
+  if (have_latest_tf_) {
+    out.header.stamp = latest_tf_.header.stamp;
+  } else {
+    out.header.stamp = stamp_now();
+  }
   out.header.frame_id = scan_frame_id_;
 
   out.angle_min       = msg.angle_min();
@@ -161,6 +192,42 @@ private:
 }
 
   void onGzOdom(const gz::msgs::Odometry &msg) {
+    const double raw_x = msg.pose().position().x();
+    const double raw_y = msg.pose().position().y();
+    const double raw_z = msg.pose().position().z();
+
+    const double raw_qx = msg.pose().orientation().x();
+    const double raw_qy = msg.pose().orientation().y();
+    const double raw_qz = msg.pose().orientation().z();
+    const double raw_qw = msg.pose().orientation().w();
+
+    const double raw_yaw = yawFromQuaternion(raw_qx, raw_qy, raw_qz, raw_qw);
+
+    if (zero_odom_on_start_ && !have_initial_odom_) {
+      initial_x_ = raw_x;
+      initial_y_ = raw_y;
+      initial_z_ = raw_z;
+      initial_yaw_ = raw_yaw;
+      have_initial_odom_ = true;
+    }
+
+    double odom_x = raw_x;
+    double odom_y = raw_y;
+    double odom_z = raw_z;
+    double odom_yaw = raw_yaw;
+
+    if (zero_odom_on_start_) {
+      const double dx = raw_x - initial_x_;
+      const double dy = raw_y - initial_y_;
+      const double cos_yaw = std::cos(initial_yaw_);
+      const double sin_yaw = std::sin(initial_yaw_);
+
+      odom_x =  cos_yaw * dx + sin_yaw * dy;
+      odom_y = -sin_yaw * dx + cos_yaw * dy;
+      odom_z = raw_z - initial_z_;
+      odom_yaw = normalizeAngle(raw_yaw - initial_yaw_);
+    }
+
     // 1) ROS /odom publish
     nav_msgs::msg::Odometry odom;
     odom.header.stamp = stamp_now();
@@ -168,14 +235,14 @@ private:
     odom.child_frame_id  = base_frame_id_;
 
     // pose
-    odom.pose.pose.position.x = msg.pose().position().x();
-    odom.pose.pose.position.y = msg.pose().position().y();
-    odom.pose.pose.position.z = msg.pose().position().z();
+    odom.pose.pose.position.x = odom_x;
+    odom.pose.pose.position.y = odom_y;
+    odom.pose.pose.position.z = odom_z;
 
-    odom.pose.pose.orientation.x = msg.pose().orientation().x();
-    odom.pose.pose.orientation.y = msg.pose().orientation().y();
-    odom.pose.pose.orientation.z = msg.pose().orientation().z();
-    odom.pose.pose.orientation.w = msg.pose().orientation().w();
+    odom.pose.pose.orientation.x = 0.0;
+    odom.pose.pose.orientation.y = 0.0;
+    odom.pose.pose.orientation.z = std::sin(odom_yaw * 0.5);
+    odom.pose.pose.orientation.w = std::cos(odom_yaw * 0.5);
 
     // twist
     odom.twist.twist.linear.x  = msg.twist().linear().x();
@@ -188,19 +255,26 @@ private:
 
     odom_pub_->publish(odom);
 
-    // 2) TF: odom -> base_link broadcast (slam_toolbox가 가장 좋아함)
-    geometry_msgs::msg::TransformStamped t;
-    t.header.stamp = odom.header.stamp;
-    t.header.frame_id = odom_frame_id_;
-    t.child_frame_id  = base_frame_id_;
+    latest_tf_.header.stamp = odom.header.stamp;
+    latest_tf_.header.frame_id = odom_frame_id_;
+    latest_tf_.child_frame_id  = base_frame_id_;
+    latest_tf_.transform.translation.x = odom.pose.pose.position.x;
+    latest_tf_.transform.translation.y = odom.pose.pose.position.y;
+    latest_tf_.transform.translation.z = odom.pose.pose.position.z;
+    latest_tf_.transform.rotation = odom.pose.pose.orientation;
+    have_latest_tf_ = true;
 
-    t.transform.translation.x = odom.pose.pose.position.x;
-    t.transform.translation.y = odom.pose.pose.position.y;
-    t.transform.translation.z = odom.pose.pose.position.z;
+    tf_broadcaster_->sendTransform(latest_tf_);
+  }
 
-    t.transform.rotation = odom.pose.pose.orientation;
+  void publishLatestTf() {
+    if (!have_latest_tf_) {
+      return;
+    }
 
-    tf_broadcaster_->sendTransform(t);
+    auto tf_msg = latest_tf_;
+    tf_msg.header.stamp = stamp_now();
+    tf_broadcaster_->sendTransform(tf_msg);
   }
 
   void onRosCmdVel(const geometry_msgs::msg::Twist::SharedPtr msg) {
@@ -229,10 +303,20 @@ private:
   std::string gz_scan_topic_, gz_clock_topic_, gz_odom_topic_, gz_cmdvel_topic_;
   std::string ros_scan_topic_, ros_clock_topic_, ros_odom_topic_, ros_cmdvel_topic_;
   std::string odom_frame_id_, base_frame_id_, scan_frame_id_;
+  bool zero_odom_on_start_{true};
+  double tf_publish_rate_hz_{50.0};
 
   bool have_sim_time_{false};
   uint64_t last_sim_sec_{0};
   uint64_t last_sim_nsec_{0};
+  bool have_initial_odom_{false};
+  double initial_x_{0.0};
+  double initial_y_{0.0};
+  double initial_z_{0.0};
+  double initial_yaw_{0.0};
+  bool have_latest_tf_{false};
+  geometry_msgs::msg::TransformStamped latest_tf_;
+  rclcpp::TimerBase::SharedPtr tf_timer_;
 };
 
 int main(int argc, char **argv) {

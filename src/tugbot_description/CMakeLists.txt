@@ -3,7 +3,7 @@ project(tugbot_description)
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY launch urdf params
+install(DIRECTORY launch urdf params worlds
   DESTINATION share/${PROJECT_NAME}
 )
 

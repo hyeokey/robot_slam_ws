@@ -29,7 +29,7 @@ def generate_launch_description():
                         "ros_scan_topic": "/scan",
                         "ros_cmdvel_topic": "/cmd_vel",
                         "odom_frame_id": "odom",
-                        "base_frame_id": "base_link",
+                        "base_frame_id": "base_footprint",
                         "scan_frame_id": "scan_omni",
                     }
                 ],

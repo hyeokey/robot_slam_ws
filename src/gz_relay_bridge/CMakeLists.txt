@@ -23,7 +23,7 @@ ament_target_dependencies(gz_relay_bridge_node
 
 add_executable(independent_steer_controller_node src/independent_steer_controller_node.cpp)
 ament_target_dependencies(independent_steer_controller_node
-  rclcpp geometry_msgs std_msgs
+  rclcpp geometry_msgs nav_msgs std_msgs
 )
 
 find_package(gz-transport13 REQUIRED)

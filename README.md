@@ -49,15 +49,6 @@ source install/setup.bash
 
 ros2 launch tugbot_description warehouse_vehicle.launch.py
 
-base_footprint
-odom
-base_link
-laser
-scan_omni
-
-ros2 topic echo /plan --once
-ros2 topic echo /local_costmap/costmap --once
-ros2 topic echo /particle_cloud --once
 ## <noraml 모드>
 ros2 topic pub /drive_mode std_msgs/msg/String "{data: 'normal'}" -1
 

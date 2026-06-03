@@ -1,4 +1,4 @@
-<독립주행 차량 스폰 시키기>
+## <독립주행 차량 스폰 시키기> 
 cd robot_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
@@ -13,36 +13,36 @@ scan_omni
 ros2 topic echo /plan --once
 ros2 topic echo /local_costmap/costmap --once
 ros2 topic echo /particle_cloud --once
-<noraml 모드>
+## <noraml 모드>
 ros2 topic pub /drive_mode std_msgs/msg/String "{data: 'normal'}" -1
 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.1, y: 0}, angular: {z: 0.0}}" -r 10
 
-<crab 모드>
+## <crab 모드>
 ros2 topic pub /drive_mode std_msgs/msg/String "{data: 'crab'}" -1
 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: -0.1}, angular: {z: 0.0}}" -r 10
 
-<spin 모드>
+## <spin 모드>
 ros2 topic pub /drive_mode std_msgs/msg/String "{data: 'spin'}" -1
 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0}, angular: {z: 0.1}}" -r 10
 
-<tf구조 만들기
+## <tf구조 만들기
 cd /home/dong/robot_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch tugbot_description tugbot_bridge_tf.launch.py
 
-<맵 만들기>
+## <맵 만들기>
 cd /home/dong/robot_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch tugbot_description tugbot_slam.launch.py
 
-<맵 저장>
+## <맵 저장>
 cd /home/dong/robot_ws
 source /opt/ros/humble/setup.bash
 ros2 run nav2_map_server map_saver_cli -f /home/dong/robot_ws/my_map
 
-<자율주행 하기>
+## <자율주행 하기>
 cd /home/dong/robot_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash

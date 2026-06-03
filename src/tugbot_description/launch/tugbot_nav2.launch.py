@@ -12,9 +12,6 @@ def generate_launch_description():
     tugbot_share = FindPackageShare("tugbot_description")
     nav2_share = FindPackageShare("nav2_bringup")
 
-    bridge_launch = PathJoinSubstitution(
-        [tugbot_share, "launch", "tugbot_bridge_tf.launch.py"]
-    )
     nav2_params = PathJoinSubstitution(
         [tugbot_share, "params", "nav2_params.yaml"]
     )
@@ -24,10 +21,6 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("map", default_value="/home/dong/robot_ws/my_map.yaml"),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(bridge_launch),
-                launch_arguments={"use_sim_time": use_sim_time}.items(),
-            ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(nav2_launch),
                 launch_arguments={

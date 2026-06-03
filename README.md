@@ -1,3 +1,45 @@
+## Gazebo Fuel 모델 경로 설정
+
+이 프로젝트의 플랫폼카 모델은 repository 안에 포함되어 있음.
+
+src/tugbot_description/models/independent_steer_vehicle/
+
+따라서 플랫폼 카는 별도 다운로드 없이 git pull 후에 빌드하면 사용 가능.
+
+다만 warehouse world에 포함된 창고, 선반, 카트 등의 배경 모델은 Gazebo Fuel cache 경로를 사용.
+
+예를 들어) 
+
+file:///home/dong/.gz/fuel/fuel.ignitionrobotics.org/movai/models/shelf/1
+
+현재 home/dong pc 기준 경로임.
+
+사용자 이름이 kim이면
+
+file:///home/kim/.gz/fuel/fuel.ignitionrobotics.org/movai/models/shelf/1
+
+수정해주면 됌. 수정할 대상 파일은 src/tugbot_description/worlds/warehouse_vehicle.world 임. 
+
+그리고 필요한 주요 fuel 모델은
+
+warehouse
+tugbot-charging-station
+cart_model_2
+shelf_big
+shelf
+pallet_box_mobile
+
+## <빌드>
+cd ~/robot_ws
+
+source /opt/ros/humble/setup.bash
+
+colcon build
+
+source install/setup.bash
+
+ros2 launch tugbot_description warehouse_vehicle.launch.py
+
 ## <독립주행 차량 스폰 시키기> 
 cd robot_ws
 

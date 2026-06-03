@@ -115,7 +115,7 @@
     </include>
 
     <include>
-      <uri>file:///home/dong/Desktop/independent_steer_vehicle</uri>
+      <uri>model://independent_steer_vehicle</uri>
       <name>tugbot</name>
       <pose>13.9 -10.6 0.085 0 0 0</pose>
     </include>

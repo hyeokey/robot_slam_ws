@@ -56,7 +56,7 @@ public:
     require_steering_ready_for_drive_ = declare_parameter<bool>(
       "require_steering_ready_for_drive", false);
 
-    // Wheel centers in base_link frame [m], extracted from /home/dong/Desktop/sdf
+    // Wheel centers in base_link frame [m], extracted from the vehicle model.
     wheel_positions_ = {{
       {"front_right",  0.558255699202, -0.500000000000},
       {"front_left",   0.558243305372,  0.500094888084},

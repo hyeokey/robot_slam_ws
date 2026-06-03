@@ -11,17 +11,26 @@ def generate_launch_description():
     default_world = PathJoinSubstitution(
         [FindPackageShare("tugbot_description"), "worlds", "warehouse_vehicle.world"]
     )
+    model_path = PathJoinSubstitution(
+        [FindPackageShare("tugbot_description"), "models"]
+    )
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("world", default_value=default_world),
             SetEnvironmentVariable(
                 name="GZ_SIM_RESOURCE_PATH",
-                value="/home/dong/Desktop:/home/dong/.gz/fuel/fuel.ignitionrobotics.org/openrobotics/models:/home/dong/.gz/fuel/fuel.ignitionrobotics.org/movai/models",
+                value=[
+                    model_path,
+                    ":/home/dong/.gz/fuel/fuel.ignitionrobotics.org/openrobotics/models:/home/dong/.gz/fuel/fuel.ignitionrobotics.org/movai/models",
+                ],
             ),
             SetEnvironmentVariable(
                 name="IGN_GAZEBO_RESOURCE_PATH",
-                value="/home/dong/Desktop:/home/dong/.gz/fuel/fuel.ignitionrobotics.org/openrobotics/models:/home/dong/.gz/fuel/fuel.ignitionrobotics.org/movai/models",
+                value=[
+                    model_path,
+                    ":/home/dong/.gz/fuel/fuel.ignitionrobotics.org/openrobotics/models:/home/dong/.gz/fuel/fuel.ignitionrobotics.org/movai/models",
+                ],
             ),
             ExecuteProcess(
                 cmd=["gz", "sim", "-r", "-v", "4", world],

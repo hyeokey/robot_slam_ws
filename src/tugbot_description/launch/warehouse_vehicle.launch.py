@@ -1,5 +1,6 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable, TimerAction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, SetEnvironmentVariable, TimerAction
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -14,10 +15,17 @@ def generate_launch_description():
     model_path = PathJoinSubstitution(
         [FindPackageShare("tugbot_description"), "models"]
     )
+    state_pub_launch = PathJoinSubstitution(
+        [FindPackageShare("tugbot_description"), "launch", "tugbot_state_publisher.launch.py"]
+    )
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("world", default_value=default_world),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(state_pub_launch),
+                launch_arguments={"use_sim_time": "true"}.items(),
+            ),
             SetEnvironmentVariable(
                 name="GZ_SIM_RESOURCE_PATH",
                 value=[

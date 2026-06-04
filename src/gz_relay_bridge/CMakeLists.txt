@@ -26,6 +26,11 @@ ament_target_dependencies(independent_steer_controller_node
   rclcpp geometry_msgs nav_msgs std_msgs
 )
 
+add_executable(localization_error_monitor_node src/localization_error_monitor_node.cpp)
+ament_target_dependencies(localization_error_monitor_node
+  rclcpp geometry_msgs nav_msgs tf2_ros
+)
+
 find_package(gz-transport13 REQUIRED)
 find_package(gz-msgs10 REQUIRED)
 
@@ -39,8 +44,14 @@ target_link_libraries(independent_steer_controller_node
   gz-msgs10::gz-msgs10
 )
 
+target_link_libraries(localization_error_monitor_node
+  gz-transport13::gz-transport13
+  gz-msgs10::gz-msgs10
+)
+
 install(TARGETS gz_relay_bridge_node
   independent_steer_controller_node
+  localization_error_monitor_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

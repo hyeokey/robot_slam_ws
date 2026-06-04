@@ -14,10 +14,10 @@ amcl:
     global_frame_id: "map"
     lambda_short: 0.1
     laser_likelihood_max_dist: 2.0
-    laser_max_range: 100.0
+    laser_max_range: 80.0
     laser_min_range: 0.2
     laser_model_type: "likelihood_field"
-    max_beams: 90
+    max_beams: 180
     max_particles: 2000
     min_particles: 500
     odom_frame_id: "odom"

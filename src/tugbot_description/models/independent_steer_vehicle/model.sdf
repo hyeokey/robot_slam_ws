@@ -100,10 +100,13 @@
       </visual>
     </link>
 
+    <!-- Front Left Steer Link 조향 링크 정의 -->
     <link name="front_left_steer_link">
       <pose>0.522381324934 0.480016900459 0.033780014266 0 0 0</pose>
+      <!-- 조향 링크의 질량 및 관성 정보 -->
       <inertial>
         <mass>0.5</mass>
+        <!-- 단순화된 관성 모멘트 설정, 시뮬레이션에서 링크의 동역학 계산에 사용됨-->
         <inertia>
           <ixx>0.0005</ixx>
           <iyy>0.0005</iyy>
@@ -113,14 +116,19 @@
           <iyz>0</iyz>
         </inertia>
       </inertial>
+      <!-- Gazebo에서 보이는 조향 링크의 형상 정의-->
       <visual name="front_left_steer_visual">
         <geometry>
           <cylinder>
+          <!-- 조향 링크를 원통 형태로 표현-->
             <radius>0.03</radius>
             <length>0.08</length>
           </cylinder>
         </geometry>
+        <!-- 원통의 시각적 회전 자세 
+        roll = 90deg로 설정하여 원통 축 방향을 조정-->
         <pose>0 0 0 1.57079632679 0 0</pose>
+        <!-- 조향 링크 색상 설정 -->
         <material>
           <ambient>0.2 0.2 0.8 1</ambient>
           <diffuse>0.2 0.2 0.8 1</diffuse>

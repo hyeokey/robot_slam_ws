@@ -64,6 +64,12 @@ ros2 topic pub /drive_mode std_msgs/msg/String "{data: 'spin'}" -1
 
 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0}, angular: {z: 0.1}}" -r 10
 
+## <auto 모드>
+ros2 topic pub /drive_mode std_msgs/msg/String "{data: 'auto'}" -1
+
+auto 모드는 Nav2/DWB에서 들어오는 /cmd_vel을 받아서 normal, spin, crab 중 안정적인 주행 방식을 내부에서 선택함.
+기본 설정에서는 localization 안정성을 위해 crab을 자동으로 사용하지 않고 normal/spin 위주로 동작함.
+
 ## <tf구조 만들기>
 source /opt/ros/humble/setup.bash
 

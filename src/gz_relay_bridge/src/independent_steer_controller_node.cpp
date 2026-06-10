@@ -1,6 +1,8 @@
 #include <array>
+#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <memory>
 #include <string>
 
@@ -55,6 +57,29 @@ public:
       "steering_drive_tolerance_rad", 0.08);
     require_steering_ready_for_drive_ = declare_parameter<bool>(
       "require_steering_ready_for_drive", false);
+    auto_crab_enabled_ = declare_parameter<bool>("auto_crab_enabled", false);
+    auto_spin_angular_threshold_ = declare_parameter<double>(
+      "auto_spin_angular_threshold", 0.35);
+    auto_spin_release_angular_threshold_ = declare_parameter<double>(
+      "auto_spin_release_angular_threshold", 0.03);
+    auto_spin_linear_threshold_ = declare_parameter<double>(
+      "auto_spin_linear_threshold", 0.04);
+    auto_spin_exit_linear_threshold_ = declare_parameter<double>(
+      "auto_spin_exit_linear_threshold", 0.10);
+    auto_spin_max_angular_speed_ = declare_parameter<double>(
+      "auto_spin_max_angular_speed", 0.45);
+    auto_spin_entry_duration_sec_ = declare_parameter<double>(
+      "auto_spin_entry_duration_sec", 0.20);
+    auto_spin_exit_duration_sec_ = declare_parameter<double>(
+      "auto_spin_exit_duration_sec", 0.40);
+    auto_mode_min_hold_sec_ = declare_parameter<double>(
+      "auto_mode_min_hold_sec", 0.80);
+    auto_crab_lateral_threshold_ = declare_parameter<double>(
+      "auto_crab_lateral_threshold", 0.05);
+    auto_crab_angular_threshold_ = declare_parameter<double>(
+      "auto_crab_angular_threshold", 0.10);
+    debug_enabled_ = declare_parameter<bool>("debug_enabled", true);
+    debug_period_sec_ = declare_parameter<double>("debug_period_sec", 1.0);
 
     // Wheel centers in base_link frame [m], extracted from the vehicle model.
     wheel_positions_ = {{
@@ -97,6 +122,8 @@ public:
       odom_topic_, 10, std::bind(&IndependentSteerController::onOdom, this, _1));
     mode_sub_ = create_subscription<std_msgs::msg::String>(
       "/drive_mode", 10, std::bind(&IndependentSteerController::onDriveMode, this, _1));
+    debug_pub_ = create_publisher<std_msgs::msg::String>(
+      "/independent_steer_controller/debug", 10);
     const bool ok_joint_state =
       gz_node_.Subscribe(joint_state_topic_, &IndependentSteerController::onJointState, this);
 
@@ -117,6 +144,11 @@ public:
       get_logger(), "Steering feedback: %s (joint_state=%s, sub=%s)",
       steering_feedback_enabled_ ? "enabled" : "disabled",
       joint_state_topic_.c_str(), ok_joint_state ? "OK" : "FAIL");
+    RCLCPP_INFO(
+      get_logger(),
+      "Auto mode: crab=%s spin_threshold=%.3f rad/s spin_linear_threshold=%.3f m/s",
+      auto_crab_enabled_ ? "enabled" : "disabled",
+      auto_spin_angular_threshold_, auto_spin_linear_threshold_);
   }
 
 private:
@@ -279,12 +311,148 @@ private:
   }
 
   void normalizeDriveMode() {
-    if (drive_mode_ != "normal" && drive_mode_ != "crab" && drive_mode_ != "spin") {
+    if (drive_mode_ == "autonomous") {
+      drive_mode_ = "auto";
+    }
+
+    if (drive_mode_ != "normal" && drive_mode_ != "crab" &&
+      drive_mode_ != "spin" && drive_mode_ != "auto")
+    {
       RCLCPP_WARN(
         get_logger(), "Unknown drive mode '%s', falling back to 'normal'",
         drive_mode_.c_str());
       drive_mode_ = "normal";
     }
+  }
+
+  bool conditionHeld(
+    bool condition,
+    rclcpp::Time &condition_start_time,
+    bool &condition_active,
+    const rclcpp::Time &current_time,
+    double required_duration_sec)
+  {
+    if (!condition) {
+      condition_active = false;
+      return false;
+    }
+
+    if (!condition_active) {
+      condition_start_time = current_time;
+      condition_active = true;
+    }
+
+    return (current_time - condition_start_time).seconds() >= required_duration_sec;
+  }
+
+  std::string selectAutoDriveMode(
+    const rclcpp::Time &current_time,
+    double vx,
+    double vy,
+    double wz,
+    bool active_motion_cmd)
+  {
+    if (!active_motion_cmd) {
+      auto_spin_entry_condition_active_ = false;
+      auto_spin_exit_condition_active_ = false;
+      return "normal";
+    }
+
+    const bool auto_mode_initialized = !last_auto_effective_mode_.empty();
+    if (!auto_mode_initialized) {
+      last_auto_effective_mode_ = "normal";
+      last_auto_mode_switch_time_ = current_time;
+    }
+
+    const bool hold_active =
+      auto_mode_initialized &&
+      (current_time - last_auto_mode_switch_time_).seconds() < auto_mode_min_hold_sec_;
+    const double linear_speed = std::hypot(vx, vy);
+    const bool spin_entry_condition =
+      std::fabs(wz) >= auto_spin_angular_threshold_ &&
+      linear_speed <= auto_spin_linear_threshold_;
+    const bool spin_exit_condition =
+      std::fabs(wz) <= auto_spin_release_angular_threshold_ ||
+      linear_speed >= auto_spin_exit_linear_threshold_;
+
+    if (last_auto_effective_mode_ == "spin") {
+      auto_spin_entry_condition_active_ = false;
+      if (hold_active) {
+        return "spin";
+      }
+
+      if (conditionHeld(
+          spin_exit_condition, auto_spin_exit_condition_start_time_,
+          auto_spin_exit_condition_active_, current_time, auto_spin_exit_duration_sec_))
+      {
+        auto_spin_exit_condition_active_ = false;
+        return "normal";
+      }
+
+      return "spin";
+    }
+
+    auto_spin_exit_condition_active_ = false;
+    if (!hold_active && conditionHeld(
+        spin_entry_condition, auto_spin_entry_condition_start_time_,
+        auto_spin_entry_condition_active_, current_time, auto_spin_entry_duration_sec_))
+    {
+      auto_spin_entry_condition_active_ = false;
+      return "spin";
+    }
+
+    if (auto_crab_enabled_ &&
+      std::fabs(vy) >= auto_crab_lateral_threshold_ &&
+      std::fabs(vx) <= auto_spin_linear_threshold_ &&
+      std::fabs(wz) <= auto_crab_angular_threshold_)
+    {
+      return "crab";
+    }
+
+    return "normal";
+  }
+
+  void publishDebugState(
+    const rclcpp::Time &current_time,
+    const std::string &effective_drive_mode,
+    bool cmd_recent,
+    bool active_motion_cmd,
+    bool have_recent_odom,
+    bool have_recent_steering_state,
+    double vx,
+    double vy,
+    double wz,
+    double odom_vx,
+    double odom_wz,
+    double first_steer_target,
+    double first_wheel_speed)
+  {
+    if (!debug_enabled_) {
+      return;
+    }
+
+    if ((current_time - last_debug_time_).seconds() < debug_period_sec_) {
+      return;
+    }
+    last_debug_time_ = current_time;
+
+    char buffer[512];
+    std::snprintf(
+      buffer, sizeof(buffer),
+      "cmd(vx=%.3f,vy=%.3f,wz=%.3f) odom(vx=%.3f,wz=%.3f) mode=%s/%s recent(cmd=%s,odom=%s,steer=%s) active=%s steer=%.3f wheel=%.3f",
+      vx, vy, wz, odom_vx, odom_wz,
+      drive_mode_.c_str(), effective_drive_mode.c_str(),
+      cmd_recent ? "true" : "false",
+      have_recent_odom ? "true" : "false",
+      have_recent_steering_state ? "true" : "false",
+      active_motion_cmd ? "true" : "false",
+      first_steer_target, first_wheel_speed);
+
+    std_msgs::msg::String debug_msg;
+    debug_msg.data = buffer;
+    debug_pub_->publish(debug_msg);
+
+    RCLCPP_INFO(get_logger(), "%s", debug_msg.data.c_str());
   }
 
   bool haveRecentSteeringState(const rclcpp::Time &current_time) const {
@@ -398,14 +566,32 @@ private:
       resetPid(wz_pid_);
     }
 
-    if (drive_mode_ == "crab") {
+    std::string effective_drive_mode = drive_mode_;
+    if (drive_mode_ == "auto") {
+      effective_drive_mode = selectAutoDriveMode(current_time, vx, vy, wz, active_motion_cmd);
+      if (effective_drive_mode != last_auto_effective_mode_) {
+        RCLCPP_INFO(
+          get_logger(), "Auto mode selected: %s", effective_drive_mode.c_str());
+        last_auto_effective_mode_ = effective_drive_mode;
+        last_auto_mode_switch_time_ = current_time;
+      }
+
+      if (effective_drive_mode != "crab") {
+        vy = 0.0;
+      }
+    }
+
+    if (effective_drive_mode == "crab") {
       wz = 0.0;
-    } else if (drive_mode_ == "spin") {
+    } else if (effective_drive_mode == "spin") {
       vx = 0.0;
       vy = 0.0;
+      wz = clamp(wz, -auto_spin_max_angular_speed_, auto_spin_max_angular_speed_);
     }
 
     const bool have_recent_steering_state = haveRecentSteeringState(current_time);
+    double first_steer_target = 0.0;
+    double first_wheel_speed = 0.0;
 
     for (std::size_t i = 0; i < wheel_positions_.size(); ++i) {
       const auto &wheel = wheel_positions_[i];
@@ -413,7 +599,7 @@ private:
       double vix = 0.0;
       double viy = 0.0;
 
-      if (drive_mode_ == "crab") {
+      if (effective_drive_mode == "crab") {
         vix = vx;
         viy = vy;
       } else {
@@ -426,7 +612,7 @@ private:
       double steer_target_angle = commanded_steer_angles_[i];
       double wheel_angular_speed = 0.0;
 
-      if (drive_mode_ == "crab" && active_motion_cmd && linear_speed > min_speed_threshold_) {
+      if (effective_drive_mode == "crab" && active_motion_cmd && linear_speed > min_speed_threshold_) {
         const double crab_target_angle = crabSteerAngleForWheel(wheel.name);
         steer_target_angle = stepCrabSteerAngle(
           i, crab_target_angle, crabSteerDirectionForWheel(wheel.name));
@@ -443,7 +629,7 @@ private:
             wheel_angular_speed *= -1.0;
           }
         }
-      } else if (drive_mode_ == "spin" && active_motion_cmd && linear_speed > min_speed_threshold_) {
+      } else if (effective_drive_mode == "spin" && active_motion_cmd && linear_speed > min_speed_threshold_) {
         steer_target_angle = spinSteerAngleForWheel(wheel.name);
 
         if (canDriveWheel(i, steer_target_angle, have_recent_steering_state)) {
@@ -486,7 +672,18 @@ private:
       gz::msgs::Double wheel_msg;
       wheel_msg.set_data(wheel_angular_speed);
       wheel_pubs_[i].Publish(wheel_msg);
+
+      if (i == 0) {
+        first_steer_target = steer_target_angle;
+        first_wheel_speed = wheel_angular_speed;
+      }
     }
+
+    publishDebugState(
+      current_time, effective_drive_mode, cmd_recent, active_motion_cmd,
+      have_recent_odom, have_recent_steering_state, vx, vy, wz,
+      latest_odom_twist_.linear.x, latest_odom_twist_.angular.z,
+      first_steer_target, first_wheel_speed);
   }
 
   std::string model_name_;
@@ -522,6 +719,25 @@ private:
   double max_steering_correction_{0.35};
   double steering_drive_tolerance_rad_{0.08};
   bool require_steering_ready_for_drive_{false};
+  bool auto_crab_enabled_{false};
+  double auto_spin_angular_threshold_{0.35};
+  double auto_spin_release_angular_threshold_{0.03};
+  double auto_spin_linear_threshold_{0.04};
+  double auto_spin_exit_linear_threshold_{0.10};
+  double auto_spin_max_angular_speed_{0.45};
+  double auto_spin_entry_duration_sec_{0.20};
+  double auto_spin_exit_duration_sec_{0.40};
+  double auto_mode_min_hold_sec_{0.80};
+  double auto_crab_lateral_threshold_{0.05};
+  double auto_crab_angular_threshold_{0.10};
+  std::string last_auto_effective_mode_;
+  rclcpp::Time last_auto_mode_switch_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time auto_spin_entry_condition_start_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time auto_spin_exit_condition_start_time_{0, 0, RCL_ROS_TIME};
+  bool auto_spin_entry_condition_active_{false};
+  bool auto_spin_exit_condition_active_{false};
+  bool debug_enabled_{true};
+  double debug_period_sec_{1.0};
 
   geometry_msgs::msg::Twist target_cmd_;
   geometry_msgs::msg::Twist latest_odom_twist_;
@@ -529,6 +745,7 @@ private:
   rclcpp::Time last_odom_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_joint_state_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_control_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_debug_time_{0, 0, RCL_ROS_TIME};
   bool have_odom_{false};
   bool have_last_control_time_{false};
   PidState vx_pid_;
@@ -549,6 +766,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr mode_sub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr debug_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

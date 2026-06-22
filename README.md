@@ -96,12 +96,8 @@ source install/setup.bash
 
 ros2 launch tugbot_description tugbot_nav2.launch.py
 
-ros2 topic echo /cmd_vel
 
-ros2 topic echo /amcl_pose --once
-
-ros2 run tf2_ros tf2_echo map base_footprint
-
+## <초기값 넣어주기>
 ros2 topic pub --once /initialpose geometry_msgs/msg/PoseWithCovarianceStamped "{
     header: {frame_id: 'map'},
     pose: {
